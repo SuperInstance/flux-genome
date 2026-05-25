@@ -1,227 +1,156 @@
 # flux-genome
 
-> Genetic algorithm framework for evolving musical traditions in dial space.
+> Genetic evolution engine for exploring the unexplored 82% of musical dial space
 
-`flux-genome` encodes musical traditions as 25-gene chromosomes and evolves them toward target positions in a 3D **dial space** (harmonic tension, rhythmic complexity, spectral density). It provides configurable crossover, mutation, and fitness operators, tournament selection with elitism, and full evolution logging — all designed to integrate with the [SuperInstance](https://github.com/SuperInstance) constraint-toolkit.
+Part of the [SuperInstance](https://github.com/SuperInstance) music constraint theory ecosystem. Uses genetic algorithms to breed novel musical traditions by evolving 25-gene genomes across three dial axes: Harmonic Tension, Rhythmic Complexity, and Spectral Density.
 
-## How It Works
+## What It Does
 
-### MusicalGenome
+Most music humanity has ever made occupies a tiny fraction of the available dial space. Jazz sits in one corner, gamelan in another, Western classical somewhere in between — but the vast majority of possible musical configurations remain unexplored. **flux-genome** treats musical traditions as positions on dials and uses genetic algorithms to systematically evolve into the unknown.
 
-A `MusicalGenome` is a vector of **25 float64 genes** clamped to `[0, 5]`, organized in four blocks:
+Each organism is a `MusicalGenome` — a 25-gene vector encoding a complete musical identity. Genes are grouped into three chromosomes (harmonic, rhythmic, spectral) that map directly to the SuperInstance dial model. The `GeneticAlgorithm` engine runs populations through selection, crossover, and mutation, logging every generation for reproducibility.
 
-| Block | Indices | Controls |
-|---|---|---|
-| Harmonic genes | 0–7 | Harmonic tension behavior |
-| Rhythmic genes | 8–15 | Rhythmic complexity behavior |
-| Spectral genes | 16–23 | Spectral density behavior |
-| Metadata gene | 24 | Generation / parent info |
+## Key Features
 
-The **phenotype** is a 3-tuple dial position computed by averaging each 8-gene block:
-
-```
-h = mean(genes[0:8])
-r = mean(genes[8:16])
-s = mean(genes[16:24])
-```
-
-### Tradition DNA
-
-Ten built-in traditions are encoded as genomes with known dial centres:
-
-| Tradition | Harmonic | Rhythmic | Spectral |
-|---|---|---|---|
-| Jazz | 3.2 | 2.8 | 2.5 |
-| Classical | 1.8 | 1.2 | 1.5 |
-| Rock | 3.5 | 3.8 | 3.0 |
-| Blues | 3.0 | 2.5 | 2.0 |
-| Electronic | 3.8 | 4.0 | 4.5 |
-| Hindustani | 2.5 | 3.2 | 1.8 |
-| Gamelan | 2.0 | 3.5 | 2.2 |
-| Gagaku | 1.5 | 1.8 | 1.0 |
-| WestAfrican | 2.8 | 4.2 | 2.8 |
-| FreeImprovisation | 4.0 | 3.5 | 3.8 |
-
-### Genetic Operators
-
-#### Crossover (3 operators)
-
-- **Uniform crossover** — each gene is selected from either parent with 50% probability
-- **Arithmetic crossover** — weighted average: `child = w * A + (1-w) * B`
-- **BLX-α blend crossover** — samples each child gene from an extended interval `[min(a,b) - α|a-b|, max(a,b) + α|a-b|]`
-
-#### Mutation (3 operators)
-
-- **Gaussian mutation** — adds `N(0, σ)` noise to each gene with per-gene probability `rate`
-- **Uniform mutation** — replaces selected genes with `Uniform(0, 5)` values
-- **Inversion mutation** — reverses a random contiguous subsequence of genes
-
-#### Fitness Functions
-
-- **Dial distance** — Euclidean distance to a target dial position
-- **Novelty score** — mean distance to k-nearest neighbours (encourages diversity)
-- **Conservation score** — negative Euclidean distance to an ancestor genome (encourages heritage)
-
-### Evolution Loop
-
-`GeneticAlgorithm` combines tournament selection (configurable size), BLX-α crossover, Gaussian mutation, and **elitism** (best individual always survives). An `EvolutionLog` records per-generation statistics: best fitness, mean fitness, population diversity (mean pairwise distance), and best dial position.
+- **25-gene MusicalGenome** — complete DNA encoding of a musical tradition across 3 chromosomes
+- **3 crossover operators** — single-point, uniform, and blend crossover for diverse offspring
+- **3 mutation operators** — Gaussian perturbation, tradition boundary snaps, and random gene resets
+- **Tradition DNA encoding** — pre-encoded genomes for known traditions (jazz, blues, gamelan, etc.)
+- **Tournament selection** — configurable tournament size for selection pressure tuning
+- **EvolutionLog** — full lineage tracking with generation-by-generation snapshots
+- **Fitness scoring** — custom fitness functions that evaluate genomes against dial-space targets
+- **27 tests** — comprehensive test suite covering all operators and edge cases
 
 ## Installation
 
 ```bash
-pip install flux-genome
+git clone https://github.com/SuperInstance/flux-genome.git
+cd flux-genome
+pip install -e ".[dev]"
 ```
 
-Requires Python ≥ 3.10, NumPy ≥ 1.24, and SciPy ≥ 1.10.
-
-For development:
-
-```bash
-pip install flux-genome[dev]
-```
+Requires Python 3.11+.
 
 ## Quick Start
 
-### Create and inspect a genome
+### Create and evolve a population
 
 ```python
-from flux_genome import MusicalGenome
+from flux_genome.genome import MusicalGenome
+from flux_genome.genetic_algorithm import GeneticAlgorithm
+from flux_genome.operators.crossover import single_point_crossover, uniform_crossover
+from flux_genome.operators.mutation import gaussian_mutation, boundary_mutation
 
-# Random genome
-g = MusicalGenome.random(seed=42)
-print(g)  # MusicalGenome(dial=(2.34, 2.81, 2.19))
+# Seed population from known traditions
+from flux_genome.tradition_dna import TRADITION_DNA
 
-# From a known tradition
-jazz = MusicalGenome.from_tradition("Jazz")
-print(jazz.dial_position)  # (~3.2, ~2.8, ~2.5)
+jazz = MusicalGenome.from_dict(TRADITION_DNA["jazz"])
+gamelan = MusicalGenome.from_dict(TRADITION_DNA["gamelan"])
 
-# Fitness against a target dial
-print(jazz.fitness((3.2, 2.8, 2.5)))  # ~0.0
-```
-
-### Run evolution
-
-```python
-from flux_genome import GeneticAlgorithm
-
+# Run evolution
 ga = GeneticAlgorithm(
     population_size=100,
-    mutation_rate=0.1,
-    crossover_rate=0.8,
-    tournament_size=3,
+    crossover_fn=uniform_crossover,
+    mutation_fn=gaussian_mutation,
+    mutation_rate=0.15,
+    tournament_size=5,
 )
-ga.initialize(target_dial=(3.0, 3.0, 3.0), seed=0)
-records = ga.evolve(n_generations=50)
 
-print(ga.best().dial_position)  # Close to (3.0, 3.0, 3.0)
-print(ga.log.best_ever().best_fitness)
+result = ga.evolve(
+    seed_genomes=[jazz, gamelan],
+    generations=500,
+    fitness_fn=my_fitness_function,
+)
+
+print(f"Best fitness: {result.best_fitness}")
+print(f"Best genome: {result.best_genome}")
 ```
 
-### Crossover and mutation
+### Inspect evolution history
 
 ```python
-from flux_genome import MusicalGenome
-from flux_genome import uniform_crossover, arithmetic_crossover, blend_crossover
-from flux_genome import gaussian_mutation, uniform_mutation, inversion_mutation
-
-a = MusicalGenome.from_tradition("Jazz")
-b = MusicalGenome.from_tradition("Classical")
-
-# Blend two traditions
-child = blend_crossover(a, b, alpha=0.5, seed=0)
-
-# Mutate
-mutated = gaussian_mutation(child, rate=0.2, sigma=0.5)
+log = result.evolution_log
+for gen in log.generations:
+    print(f"Gen {gen.number}: best={gen.best_fitness:.4f} avg={gen.avg_fitness:.4f}")
 ```
 
-### Tradition encoding / decoding
+## Architecture
 
-```python
-from flux_genome import encode_tradition, decode_tradition
-
-genome = encode_tradition("Jazz", dial_center=(3.2, 2.8, 2.5), seed=0)
-info = decode_tradition(genome)
-print(info["dial_position"])   # (harmonic, rhythmic, spectral)
-print(info["harmonic_genes"])  # 8 float values
+```
+flux_genome/
+├── genome.py              # MusicalGenome (25-gene vector, 3 chromosomes)
+├── genetic_algorithm.py   # GeneticAlgorithm engine + EvolutionLog
+├── population.py          # Population management, statistics
+├── fitness.py             # Fitness evaluation framework
+├── tradition_dna.py       # Pre-encoded tradition genomes
+└── operators/
+    ├── crossover.py       # single_point, uniform, blend
+    └── mutation.py        # gaussian, boundary, random_reset
 ```
 
-### Evolution log analysis
+### The 25-Gene Model
 
-```python
-records = ga.log.to_records()  # list of dicts
-for r in records:
-    print(f"Gen {r['generation']}: best={r['best_fitness']:.4f}, "
-          f"mean={r['mean_fitness']:.4f}, diversity={r['diversity']:.4f}")
+Genes are organized into three chromosomes that mirror the SuperInstance dial axes:
 
-best = ga.log.best_ever()
-print(f"Best ever: gen {best.generation}, fitness {best.best_fitness:.4f}")
-```
+| Chromosome | Genes | Dial Axis |
+|---|---|---|
+| Harmonic | 0–8 | Harmonic Tension |
+| Rhythmic | 9–16 | Rhythmic Complexity |
+| Spectral | 17–24 | Spectral Density |
+
+Each gene is a float in `[0.0, 1.0]`, representing a normalized position on its respective dial.
 
 ## API Reference
 
 ### `MusicalGenome`
 
-| Method / Property | Description |
-|---|---|
-| `MusicalGenome(genes)` | Create from a 25-element array |
-| `MusicalGenome.random(seed)` | Random genome |
-| `MusicalGenome.from_tradition(name)` | Genome from built-in tradition catalogue |
-| `.dial_position` | 3-tuple `(harmonic, rhythmic, spectral)` |
-| `.harmonic_genes` | Genes 0–7 |
-| `.rhythmic_genes` | Genes 8–15 |
-| `.spectral_genes` | Genes 16–23 |
-| `.metadata_gene` | Gene 24 (generation/parent info) |
-| `.fitness(target_dial)` | Euclidean distance to target |
-| `.copy()` | Independent clone |
+```python
+genome = MusicalGenome(genes=[...])           # 25 floats
+genome = MusicalGenome.random()                # Random valid genome
+genome = MusicalGenome.from_dict(tradition)    # From tradition DNA dict
+genome.to_dict()                               # Serialize
+genome.hammonic_genes                          # Genes 0–8
+genome.rhythmic_genes                          # Genes 9–16
+genome.spectral_genes                          # Genes 17–24
+```
 
 ### `GeneticAlgorithm`
 
-| Method | Description |
-|---|---|
-| `GeneticAlgorithm(population_size, mutation_rate, crossover_rate, tournament_size)` | Configure the GA |
-| `.initialize(target_dial, traditions, seed)` | Seed population with traditions + random genomes |
-| `.evolve(n_generations)` | Run evolution, return log records |
-| `.best()` | Current best genome |
-| `.log` | `EvolutionLog` instance |
-
-### Crossover Operators
-
-| Function | Signature |
-|---|---|
-| `uniform_crossover(a, b, seed)` | Each gene from either parent |
-| `arithmetic_crossover(a, b, weight)` | Weighted average |
-| `blend_crossover(a, b, alpha, seed)` | BLX-α extended interval sampling |
-
-### Mutation Operators
-
-| Function | Signature |
-|---|---|
-| `gaussian_mutation(genome, rate, sigma, seed)` | Add N(0, σ) noise per gene |
-| `uniform_mutation(genome, rate, seed)` | Replace genes with U(0, 5) |
-| `inversion_mutation(genome, seed)` | Reverse a random gene segment |
-
-### Fitness Functions
-
-| Function | Description |
-|---|---|
-| `dial_distance(genome, target)` | Euclidean distance in dial space |
-| `novelty_score(genome, population, k)` | Mean distance to k nearest neighbours |
-| `conservation_score(genome, ancestor)` | Negative distance to ancestor |
+```python
+ga = GeneticAlgorithm(
+    population_size=100,
+    crossover_fn=uniform_crossover,
+    mutation_fn=gaussian_mutation,
+    mutation_rate=0.1,
+    tournament_size=5,
+    elitism=2,
+)
+result = ga.evolve(seed_genomes, generations, fitness_fn)
+```
 
 ### `EvolutionLog`
 
-| Method | Description |
-|---|---|
-| `.record(generation, population, target_dial)` | Record a generation snapshot |
-| `.best_ever()` | `GenerationRecord` with lowest best fitness |
-| `.to_records()` | Export all records as list of dicts |
+```python
+result.evolution_log.generations    # List[GenerationRecord]
+result.evolution_log.best_genome    # Best genome across all generations
+result.evolution_log.best_fitness   # Best fitness score
+```
+
+## Testing
+
+```bash
+pytest                    # Run all 27 tests
+pytest -v                 # Verbose output
+pytest --cov=flux_genome  # With coverage
+```
 
 ## Related Repos
 
-- **[constraint-toolkit](https://github.com/SuperInstance/constraint-toolkit)** — Dial space definitions and constraint solving
-- **[flux-hyperbolic](https://github.com/SuperInstance/flux-hyperbolic)** — Hyperbolic geometry embeddings for tradition hierarchies
-- **[superinstance-live](https://github.com/SuperInstance/superinstance-live)** — Live session controller using evolved genomes
-- **[plato-client](https://github.com/SuperInstance/plato-client)** — Client library for the Plato optimization backend
+- [**flux-hyperbolic**](https://github.com/SuperInstance/flux-hyperbolic) — Hyperbolic geometry for tradition embedding and hierarchy
+- [**constraint-toolkit**](https://github.com/SuperInstance/constraint-toolkit) — Core constraint satisfaction engine
+- [**constraint-dsl**](https://github.com/SuperInstance/constraint-dsl) — YAML DSL for defining constraint pipelines
+- [**superinstance-live**](https://github.com/SuperInstance/superinstance-live) — Live session controller using evolved genomes
+- [**flux-ffi**](https://github.com/SuperInstance/flux-ffi) — FFI bindings for the shared LLVM backend
 
 ## License
 
